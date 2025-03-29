@@ -17,7 +17,7 @@ include("plot_results.jl")
 	#vins    = 0.0
 	#uout    = 0.0
 	#vout    = 0.0
-	timeout = 1.4
+	timeout = 1.8
 	# numerics
 	nx, ny = 101, 101
 	nt = 10000
@@ -78,7 +78,7 @@ include("plot_results.jl")
 			h[i, j] = D <= R ? hins : hout
 		end
 	end
-	#igate = nx ÷ 2
+	
 
 	#set_dambreak!(h, hins, hout; direction = :y)
 
