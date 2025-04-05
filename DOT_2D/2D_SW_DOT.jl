@@ -253,8 +253,8 @@ using Plots, Plots.Measures
 				@inbounds for j in 1:(ny-1)
 					for i in 1:nx
 						# Cache the current slices for efficiency
-						dps = dpsidsy[:, i, j]          # 3-element vector
-						Ay = Aygp[:, :, i, j]           # 3x3 matrix
+						dps   = dpsidsy[:, i, j]          # 3-element vector
+						Ay    = Aygp[:, :, i, j]           # 3x3 matrix
 						Ayabs = Aygpabs[:, :, i, j]       # 3x3 matrix
 
 						# Compute the matrix-vector products and accumulate into DLy and DRy

@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "type": "julia",
+            "request": "launch",
+            "name": "Run Simulation",
+            "program": "/home/nunzio/Desktop/JULIA/projects/project_2D_SWE/2D_SW_DOT_Teff.jl",
+            "env": {
+                "JULIA_NUM_THREADS": "2"
+            }
+        }
+    ]
+}
