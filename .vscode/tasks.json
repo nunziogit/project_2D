@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run Julia Script with 2 Threads",
+            "label": "Run Julia Script with n Threads",
             "type": "shell",
             "command": "julia",
             "args": [

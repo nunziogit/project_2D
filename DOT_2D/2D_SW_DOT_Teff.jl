@@ -1,6 +1,6 @@
 using Plots, Plots.Measures, Printf
 using BenchmarkTools
-using StaticArrays
+using StaticArrays, LoopVectorization
 
 function gaussian_points(ngp::Int) #=  =#
 	if ngp == 1
@@ -205,6 +205,25 @@ function process_fluxes_y_merged!(
 	return nothing
 end
 
+#function update_avx!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx, ny)
+#    @avx for j in 2:(ny-1), i in 2:(nx-1)
+#        # Compute divergence contributions
+#        div_x = dtdx * (DRx[1, i-1, j] + DLx[1, i, j])
+#        div_y = dtdy * (DRy[1, i, j-1] + DLy[1, i, j])
+#        h[i, j] -= div_x + div_y
+#
+#        div_x_qx = dtdx * (DRx[2, i-1, j] + DLx[2, i, j])
+#        div_y_qx = dtdy * (DRy[2, i, j-1] + DLy[2, i, j])
+#        qx[i, j] -= div_x_qx + div_y_qx
+#
+#        div_x_qy = dtdx * (DRx[3, i-1, j] + DLx[3, i, j])
+#        div_y_qy = dtdy * (DRy[3, i, j-1] + DLy[3, i, j])
+#        qy[i, j] -= div_x_qy + div_y_qy
+#    end
+#    return nothing
+#end
+
+
 function update!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx::Int, ny::Int)
     @inbounds Threads.@threads for j in 2:(ny-1)
         for i in 2:(nx-1)
@@ -265,7 +284,7 @@ end
 	nvis = 20
 	it = 1
 
-	# derived numerics
+	# derived numeri]cs
 	dx, dy = lx / nx, ly / ny
 	xc, yc = LinRange(dx / 2, lx - dx / 2, nx), LinRange(dy / 2, ly - dy / 2, ny)
 
@@ -406,6 +425,7 @@ end
 		# --- Update Step ---
 		# Call the update function.
 		update!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx, ny)
+		#update_avx!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx, ny)
 		#BoundaryConditions
 
 		# Reflective boundary conditions on all 4 walls
