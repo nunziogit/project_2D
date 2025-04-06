@@ -1,5 +1,6 @@
 using Plots, Plots.Measures, Printf
 using BenchmarkTools
+using StaticArrays
 
 function gaussian_points(ngp::Int) #=  =#
 	if ngp == 1
@@ -17,9 +18,7 @@ function gaussian_points(ngp::Int) #=  =#
 	return sgp, wgp
 end
 
-function apply_reflective_boundaries!(h::AbstractArray{Float64},
-	qx::AbstractArray{Float64},
-	qy::AbstractArray{Float64})
+function apply_reflective_boundaries!(h, qx, qy)
 	# Left wall (x = 0)
 	h[1, :]  .= h[2, :]
 	qx[1, :] .= -qx[2, :]
@@ -43,156 +42,193 @@ function apply_reflective_boundaries!(h::AbstractArray{Float64},
 	return nothing
 end
 
+function compute_dt(nx, ny, _dx, _dy, cfl, u, v, h, gravit)
+	nthreads = Threads.nthreads()
+	# Create an array to hold the maximum from each thread.
+	local_maxes = zeros(Float64, nthreads)
 
-@views function compute_dt(nx, ny, _dx, _dy, cfl, u, v, h, gravit)
-	max_ratio = 0.0
-	# Loop over grid points
-	for j in 1:ny
-		for i in 1:nx
-			# Compute the local wave speed once
+	Threads.@threads for j in 1:ny
+		tid = Threads.threadid()
+		local_max = 0.0
+		@inbounds for i in 1:nx
+			# Compute the local wave speed for cell (i, j)
 			local_speed = abs(u[i, j]) + sqrt(gravit * h[i, j])
-			# Multiply by precomputed reciprocals instead of dividing at each point
 			r1 = local_speed * _dx
 			r2 = local_speed * _dy
-			# Update the maximum ratio
-			max_ratio = max(max_ratio, r1, r2)
+			local_max = max(local_max, r1, r2)
 		end
+		# Update the thread-local maximum.
+		local_maxes[tid] = max(local_maxes[tid], local_max)
 	end
-	dt = cfl / max_ratio
+
+	# Reduce the thread-local max values to a global maximum.
+	global_max = maximum(local_maxes)
+	dt = cfl / global_max
 	return dt
 end
 
-# Define an inline function to compute dpsidsx for a given cell.
-function compute_dpsidsx!(dps, hl, hr, ul, ur, vl, vr)
-	dps[1] = hr - hl
-	dps[2] = ur * hr - ul * hl
-	dps[3] = vr * hr - vl * hl
-end
 
-function compute_Axgp!(Ax, ugp, vgp, c2gp)
-	Ax[1, 1] = 0.0
-	Ax[1, 2] = 1.0
-	Ax[1, 3] = 0.0
-	Ax[2, 1] = c2gp - ugp^2
-	Ax[2, 2] = 2.0 * ugp
-	Ax[2, 3] = 0.0
-	Ax[3, 1] = -ugp * vgp
-	Ax[3, 2] = vgp
-	Ax[3, 3] = ugp
-end
+function process_fluxes_x_merged!(
+	dpsidsx, Axgp, Axgpabs,
+	DLx, DRx,
+	hl, hr, ul, ur, vl, vr,
+	ugp, vgp, c2gp,
+	λ1, λ2, λ3,
+	w::Float64, nx::Int, ny::Int,
+)
+	@inbounds Threads.@threads for i in 1:(nx-1)
+		for j in 1:ny
+			# --- dpsidsx computation ---
+			hrij = hr[i, j]
+			hlij = hl[i, j]
+			urij = ur[i, j]
+			ulij = ul[i, j]
+			vrij = vr[i, j]
+			vlij = vl[i, j]
+			ugpij = ugp[i, j]
+			vgpij = vgp[i, j]
 
-# Define an inline function to compute Axgpabs.
-function compute_Axgpabs!(Axabs, λ1, λ2, λ3, vgp)
-	absλ1 = abs(λ1)
-	absλ3 = abs(λ3)
-	den = λ1 - λ3
-	invden = 1.0 / den         # Compute reciprocal once
-	absden = absλ1 - absλ3
+			# Compute the difference vector and store as a StaticVector
+			local_dps = @SVector [hrij - hlij,
+				urij * hrij - ulij * hlij,
+				vrij * hrij - vlij * hlij]
+			# Optionally store into the full array if needed:
+			dpsidsx[:, i, j] .= local_dps
 
-	Axabs[1, 1] = (-absλ1 * λ3 + absλ3 * λ1) * invden
-	Axabs[1, 2] = absden * invden
-	Axabs[1, 3] = 0.0
+			# --- Axgp computation ---
+			# Build the 3x3 flux matrix using StaticArrays
+			localAx = @SMatrix [                 0.0                     1.0                     0.0;
+				 c2gp[i, j]-ugpij*ugpij   2.0*ugpij          0.0;
+				-ugpij*vgpij       vgpij              ugpij]
+			Axgp[:, :, i, j] .= localAx
 
-	Axabs[2, 1] = -λ1 * λ3 * absden * invden
-	Axabs[2, 2] = (λ1 * absλ1 - λ3 * absλ3) * invden
-	Axabs[2, 3] = 0.0
+			# --- Axgpabs computation ---
+			λ1ij = λ1[i, j]
+			λ2ij = λ2[i, j]
+			λ3ij = λ3[i, j]
+			absλ1ij = abs(λ1ij)
+			absλ2ij = abs(λ2ij)
+			absλ3ij = abs(λ3ij)
+			den = λ1ij - λ3ij
+			invden = 1.0 / den          # reciprocal of den
+			absden = absλ1ij - absλ3ij
 
-	Axabs[3, 1] = -((den * abs(λ2) - absλ3 * λ1 + absλ1 * λ3) * vgp) * invden
-	Axabs[3, 2] = vgp * absden * invden
-	Axabs[3, 3] = abs(λ2)
-end
+			localAxabs = if abs(den) > 1e-12
+				@SMatrix [      (-absλ1ij*λ3ij+absλ3ij*λ1ij)*invden            absden*invden                 0.0;
+					-λ1ij*λ3ij*absden*invden                         (λ1ij*absλ1ij-λ3ij*absλ3ij)*invden           0.0;
+					-((den * absλ2ij - absλ3ij * λ1ij + absλ1ij * λ3ij) * vgpij)*invden    vgpij*absden*invden     absλ2ij]
+			else
+				@SMatrix zeros(3, 3)
+			end
+			Axgpabs[:, :, i, j] .= localAxabs
 
+			# --- Flux accumulation ---
+			# Compute the contribution: (Ax ± Axabs) * dps
+			local_flux_left = w * (localAx - localAxabs) * local_dps
+			local_flux_right = w * (localAx + localAxabs) * local_dps
 
-
-function compute_fluct_DLx_DRx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp, igp, nx, ny)
-	@inbounds for j in 1:ny
-		for i in 1:(nx-1)
-			# Cache the current slice for dpsidsx and the matrices
-			dps   = dpsidsx[:, i, j]    # 3-element vector
-			Ax    = Axgp[:, :, i, j]      # 3x3 matrix
-			Axabs = Axgpabs[:, :, i, j]   # 3x3 matrix
-
-			# Compute matrix-vector products and accumulate in DLx and DRx
-			DLx[:, i, j] .+= wgp[igp] * (Ax - Axabs) * dps
-			DRx[:, i, j] .+= wgp[igp] * (Ax + Axabs) * dps
+			DLx[:, i, j] .+= local_flux_left
+			DRx[:, i, j] .+= local_flux_right
 		end
 	end
 	return nothing
 end
 
-function compute_dpsidsy!(dps, hb, ht, ub, ut, vb, vt)
-	# dps is a 3-element vector that will be updated in place.
-	dps[1] = ht - hb
-	dps[2] = ut * ht - ub * hb
-	dps[3] = vt * ht - vb * hb
-end
-
-function compute_Aygp!(Aygp, ugp, vgp, c2gp)
-	# Aygp is a 3x3 matrix (updated in place) for the given cell.
-	Aygp[1, 1] = 0.0
-	Aygp[1, 2] = 0.0
-	Aygp[1, 3] = 1.0
-	Aygp[2, 1] = -ugp * vgp
-	Aygp[2, 2] = vgp
-	Aygp[2, 3] = ugp
-	Aygp[3, 1] = c2gp - vgp^2
-	Aygp[3, 2] = 0.0
-	Aygp[3, 3] = 2.0 * vgp
-end
-
-function compute_Aygpabs!(Aygpabs, λ1, λ2, λ3, ugp)
-	# Compute common subexpressions.
-	absλ1 = abs(λ1)
-	absλ3 = abs(λ3)
-	den = λ1 - λ3
-	invden = 1.0 / den          # reciprocal of den
-	absden = absλ1 - absλ3
-
-	# Row 1.
-	Aygpabs[1, 1] = (-absλ1 * λ3 + absλ3 * λ1) * invden
-	Aygpabs[1, 2] = 0.0
-	Aygpabs[1, 3] = absden * invden
-
-	# Row 2.
-	Aygpabs[2, 1] = -((den * abs(λ2) - absλ3 * λ1 + absλ1 * λ3) * ugp) * invden
-	Aygpabs[2, 2] = abs(λ2)
-	Aygpabs[2, 3] = ugp * absden * invden
-
-	# Row 3.
-	Aygpabs[3, 1] = -λ1 * λ3 * absden * invden
-	Aygpabs[3, 2] = 0.0
-	Aygpabs[3, 3] = (λ1 * absλ1 - λ3 * absλ3) * invden
-end
-
-function compute_fluct_DLy_DRy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp, igp, nx, ny)
-	@inbounds for j in 1:(ny-1)
+function process_fluxes_y_merged!(
+	dpsidsy, Aygp, Aygpabs,  # output arrays: dpsidsy (3×nx×(ny-1)), Aygp and Aygpabs (3×3×nx×(ny-1))
+	DLy, DRy,               # accumulation arrays: DLy, DRy (3×nx×(ny-1))
+	hb, ht, ub, ut, vb, vt,   # cell-face arrays for bottom/top (size: nx×(ny-1))
+	ugp, vgp, c2gp,         # interpolated values (size: nx×(ny-1))
+	λ1, λ2, λ3,             # eigenvalue arrays (size: nx×(ny-1))
+	w::Float64,             # weight for the current Gaussian point
+	nx::Int, ny::Int,        # grid dimensions (with ny as the number of cells in y, so faces are ny-1)
+)
+	@inbounds Threads.@threads for j in 1:(ny-1)
 		for i in 1:nx
-			# dps is a 3-element vector for the current cell interface.
-			dps = dpsidsy[:, i, j]
-			# Ay and Ayabs are the 3x3 matrices.
-			Ay    = Aygp[:, :, i, j]
-			Ayabs = Aygpabs[:, :, i, j]
+			# --- dpsidsy computation ---
+			local_ht = ht[i, j]
+			local_hb = hb[i, j]
+			local_ut = ut[i, j]
+			local_ub = ub[i, j]
+			local_vt = vt[i, j]
+			local_vb = vb[i, j]
 
-			DLy[:, i, j] .+= wgp[igp] * (Ay - Ayabs) * dps
-			DRy[:, i, j] .+= wgp[igp] * (Ay + Ayabs) * dps
+			# Compute the difference vector (as a static vector)
+			local_dps = @SVector [local_ht - local_hb,
+				local_ut * local_ht - local_ub * local_hb,
+				local_vt * local_ht - local_vb * local_hb]
+			dpsidsy[:, i, j] .= local_dps
+
+			# --- Aygp computation ---
+			# Cache interpolated values
+			local_ugp = ugp[i, j]
+			local_vgp = vgp[i, j]
+			local_c2gp = c2gp[i, j]
+			# Build the 3×3 flux matrix for y-direction using StaticArrays.
+			# Note: For y-direction, the structure is different:
+			#   Aygp[1, :] corresponds to the "momentum" in the y direction.
+			localAy = @SMatrix [ 0.0                  0.0            1.0;
+				-local_ugp*local_vgp   local_vgp     local_ugp;
+				 local_c2gp-local_vgp^2    0.0         2.0*local_vgp]
+			Aygp[:, :, i, j] .= localAy
+
+			# --- Aygpabs computation ---
+			# Extract eigenvalue scalars from the y arrays
+			local_λ1 = λ1[i, j]
+			local_λ2 = λ2[i, j]
+			local_λ3 = λ3[i, j]
+			local_absλ1 = abs(local_λ1)
+			local_absλ2 = abs(local_λ2)
+			local_absλ3 = abs(local_λ3)
+			local_den = local_λ1 - local_λ3
+			local_absden = local_absλ1 - local_absλ3
+
+			localAyabs = if abs(local_den) > 1e-12
+				@SMatrix [(-local_absλ1*local_λ3+local_absλ3*local_λ1)/local_den      0.0                   local_absden/local_den;
+					-((local_den * local_absλ2 - local_absλ3 * local_λ1 + local_absλ1 * local_λ3) * local_ugp)/local_den abs(local_λ2)   local_ugp*local_absden/local_den;
+					-local_λ1*local_λ3*local_absden/local_den                           0.0                   (local_λ1*local_absλ1-local_λ3*local_absλ3)/local_den]
+			else
+				@SMatrix zeros(3, 3)
+			end
+			Aygpabs[:, :, i, j] .= localAyabs
+
+			# --- Flux accumulation ---
+			# Compute the flux contribution: (Aygp ± Aygpabs) * dps
+			local_flux_left = w * (localAy - localAyabs) * local_dps
+			local_flux_right = w * (localAy + localAyabs) * local_dps
+
+			DLy[:, i, j] .+= local_flux_left
+			DRy[:, i, j] .+= local_flux_right
 		end
 	end
+
 	return nothing
 end
 
-function update!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx, ny)
-	@inbounds  Threads.@threads for i in 2:(nx-1)
-		for j in 2:(ny-1)
-			# Compute divergence in x-direction:
-			h[i, j]  -= dtdx * (DRx[1, i-1, j] + DLx[1, i, j]) + dtdy * (DRy[1, i, j-1] + DLy[1, i, j])
-			qx[i, j] -= dtdx * (DRx[2, i-1, j] + DLx[2, i, j]) + dtdy * (DRy[2, i, j-1] + DLy[2, i, j])
-			qy[i, j] -= dtdx * (DRx[3, i-1, j] + DLx[3, i, j]) + dtdy * (DRy[3, i, j-1] + DLy[3, i, j])
-		end
-	end
+function update!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx::Int, ny::Int)
+    @inbounds Threads.@threads for j in 2:(ny-1)
+        for i in 2:(nx-1)
+            # Precompute divergence terms for h:
+            div_x = dtdx * (DRx[1, i-1, j] + DLx[1, i, j])
+            div_y = dtdy * (DRy[1, i, j-1] + DLy[1, i, j])
+            h[i, j] -= div_x + div_y
+
+            # For qx:
+            div_x_qx = dtdx * (DRx[2, i-1, j] + DLx[2, i, j])
+            div_y_qx = dtdy * (DRy[2, i, j-1] + DLy[2, i, j])
+            qx[i, j] -= div_x_qx + div_y_qx
+
+            # For qy:
+            div_x_qy = dtdx * (DRx[3, i-1, j] + DLx[3, i, j])
+            div_y_qy = dtdy * (DRy[3, i, j-1] + DLy[3, i, j])
+            qy[i, j] -= div_x_qy + div_y_qy
+        end
+    end
+    return nothing
 end
 
 function update_velocity!(u, v, qx, qy, h, nx, ny)
-	@inbounds for i in 1:nx
+	@inbounds Threads.@threads for i in 1:nx
 		for j in 1:ny
 			if h[i, j] > 1e-12
 				inv_h = 1.0 / h[i, j]  # Compute reciprocal once.
@@ -204,7 +240,7 @@ function update_velocity!(u, v, qx, qy, h, nx, ny)
 			end
 		end
 	end
-	return nothing #=  =#
+	return nothing 
 end
 
 
@@ -220,7 +256,7 @@ end
 	hout    = 1.0
 	timeout = 4.0
 	# numerics
-	nx, ny = 201, 201
+	nx, ny = 401, 401
 	maxiter_t = 10000
 	ngp = 1  #number of gaussian points
 	sgp, wgp = gaussian_points(ngp)
@@ -278,9 +314,9 @@ end
 	# time loop
 	time = 0.0
 	timeout_reached = false
-	t_tic = 0.0
+	t_tic = Base.time()
 	while it <= maxiter_t && !timeout_reached
-		t_tic = Base.time()
+		#t_tic = Base.time()
 
 		# --- Time step ---
 		# Compute the time step based on the CFL condition
@@ -308,6 +344,7 @@ end
 			vr = v[2:end, :]
 
 			for igp in 1:ngp
+
 				hgp  = @. hl + sgp[igp] * (hr - hl)
 				ugp  = @. ul + sgp[igp] * (ur - ul)
 				vgp  = @. vl + sgp[igp] * (vr - vl)
@@ -316,28 +353,22 @@ end
 				λ1 = @. (ugp - sqrt(c2gp))
 				λ2 = ugp
 				λ3 = @. (ugp + sqrt(c2gp))
+				process_fluxes_x_merged!(
+					dpsidsx, Axgp, Axgpabs,   # output arrays (for differences and matrices)
+					DLx, DRx,                # accumulation arrays for flux contributions
+					hl, hr, ul, ur, vl, vr,    # views for left/right cell values
+					ugp, vgp, c2gp,          # computed cell-centered/interpolated values
+					λ1, λ2, λ3,              # eigenvalue arrays
+					wgp[igp],                # weight for the current Gaussian point
+					nx, ny,                   # grid dimensions
+				)
 
-
-
-				@inbounds for j in 1:ny
-					for i in 1:(nx-1)
-						# --- dpsidsx computation ---
-						compute_dpsidsx!(dpsidsx[:, i, j],
-							hl[i, j], hr[i, j],
-							ul[i, j], ur[i, j],
-							vl[i, j], vr[i, j])
-						# Compute Axgp for the current cell.
-						compute_Axgp!(Axgp[:, :, i, j], ugp[i, j], vgp[i, j], c2gp[i, j])
-						# --- Axgpabs computation ---
-						compute_Axgpabs!(Axgpabs[:, :, i, j], λ1[i, j], λ2[i, j], λ3[i, j], vgp[i, j])
-					end
-				end
-				compute_fluct_DLx_DRx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp, igp, nx, ny)
 			end
 
 			DLx = @. 0.5 * DLx
 			DRx = @. 0.5 * DRx
 		end
+
 		@views begin
 			# Create views for bottom/top cell values.
 			hb = h[:, 1:end-1]
@@ -357,23 +388,14 @@ end
 				λ2 = vgp
 				λ3 = @. vgp + sqrt(c2gp)
 
-				@inbounds for j in 1:(ny-1)
-					for i in 1:nx
-						# Compute differences for the stencil in y-direction.
-						compute_dpsidsy!(dpsidsy[:, i, j],
-							hb[i, j], ht[i, j],
-							ub[i, j], ut[i, j],
-							vb[i, j], vt[i, j])
-						# Compute the flux matrix.
-						compute_Aygp!(Aygp[:, :, i, j],
-							ugp[i, j], vgp[i, j], c2gp[i, j])
-						# Compute the absolute flux matrix.
-						compute_Aygpabs!(Aygpabs[:, :, i, j],
-							λ1[i, j], λ2[i, j], λ3[i, j], ugp[i, j])
-					end
-				end
-
-				compute_fluct_DLy_DRy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp, igp, nx, ny)
+				process_fluxes_y_merged!(
+					dpsidsy, Aygp, Aygpabs,
+					DLy, DRy,
+					hb, ht, ub, ut, vb, vt,
+					ugp, vgp, c2gp,
+					λ1, λ2, λ3,
+					wgp[igp], nx, ny,
+				)
 			end
 
 			DLy .= @. 0.5 * DLy

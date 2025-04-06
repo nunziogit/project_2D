@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Julia Script with 2 Threads",
+            "type": "shell",
+            "command": "julia",
+            "args": [
+                "-t", "4",
+                "${workspaceFolder}/DOT_2D/2D_SW_DOT_Teff.jl"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
