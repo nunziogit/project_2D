@@ -13,7 +13,7 @@ include("plot_results.jl")
 	R       = 2.5 #Radius of the initial circular dam
 	hins    = 2.5
 	hout    = 1.0
-	timeout = 4.0
+	timeout = 2.0
 	# numerics
 	nx, ny = 101, 101
 	nt = 10000
