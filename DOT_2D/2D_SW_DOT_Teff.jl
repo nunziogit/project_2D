@@ -97,7 +97,7 @@ function process_fluxes_x_merged!(
 
 			# --- Axgp computation ---
 			# Build the 3x3 flux matrix using StaticArrays
-			localAx = @SMatrix [                 0.0                     1.0                     0.0;
+			localAx = @SMatrix [                                 0.0                     1.0                     0.0;
 				 c2gp[i, j]-ugpij*ugpij   2.0*ugpij          0.0;
 				-ugpij*vgpij       vgpij              ugpij]
 			Axgp[:, :, i, j] .= localAx
@@ -114,7 +114,7 @@ function process_fluxes_x_merged!(
 			absden = absλ1ij - absλ3ij
 
 			localAxabs = if abs(den) > 1e-12
-				@SMatrix [      (-absλ1ij*λ3ij+absλ3ij*λ1ij)*invden            absden*invden                 0.0;
+				@SMatrix [            (-absλ1ij*λ3ij+absλ3ij*λ1ij)*invden            absden*invden                 0.0;
 					-λ1ij*λ3ij*absden*invden                         (λ1ij*absλ1ij-λ3ij*absλ3ij)*invden           0.0;
 					-((den * absλ2ij - absλ3ij * λ1ij + absλ1ij * λ3ij) * vgpij)*invden    vgpij*absden*invden     absλ2ij]
 			else
@@ -124,7 +124,7 @@ function process_fluxes_x_merged!(
 
 			# --- Flux accumulation ---
 			# Compute the contribution: (Ax ± Axabs) * dps
-			local_flux_left = w * (localAx - localAxabs) * local_dps
+			local_flux_left  = w * (localAx - localAxabs) * local_dps
 			local_flux_right = w * (localAx + localAxabs) * local_dps
 
 			DLx[:, i, j] .+= local_flux_left
@@ -167,7 +167,7 @@ function process_fluxes_y_merged!(
 			# Build the 3×3 flux matrix for y-direction using StaticArrays.
 			# Note: For y-direction, the structure is different:
 			#   Aygp[1, :] corresponds to the "momentum" in the y direction.
-			localAy = @SMatrix [ 0.0                  0.0            1.0;
+			localAy = @SMatrix [                 0.0                  0.0            1.0;
 				-local_ugp*local_vgp   local_vgp     local_ugp;
 				 local_c2gp-local_vgp^2    0.0         2.0*local_vgp]
 			Aygp[:, :, i, j] .= localAy
@@ -184,7 +184,7 @@ function process_fluxes_y_merged!(
 			local_absden = local_absλ1 - local_absλ3
 
 			localAyabs = if abs(local_den) > 1e-12
-				@SMatrix [(-local_absλ1*local_λ3+local_absλ3*local_λ1)/local_den      0.0                   local_absden/local_den;
+				@SMatrix [      (-local_absλ1*local_λ3+local_absλ3*local_λ1)/local_den      0.0                   local_absden/local_den;
 					-((local_den * local_absλ2 - local_absλ3 * local_λ1 + local_absλ1 * local_λ3) * local_ugp)/local_den abs(local_λ2)   local_ugp*local_absden/local_den;
 					-local_λ1*local_λ3*local_absden/local_den                           0.0                   (local_λ1*local_absλ1-local_λ3*local_absλ3)/local_den]
 			else
@@ -225,25 +225,25 @@ end
 
 
 function update!(h, qx, qy, DLx, DRx, DLy, DRy, dtdx, dtdy, nx::Int, ny::Int)
-    @inbounds Threads.@threads for j in 2:(ny-1)
-        for i in 2:(nx-1)
-            # Precompute divergence terms for h:
-            div_x = dtdx * (DRx[1, i-1, j] + DLx[1, i, j])
-            div_y = dtdy * (DRy[1, i, j-1] + DLy[1, i, j])
-            h[i, j] -= div_x + div_y
+	@inbounds Threads.@threads for j in 2:(ny-1)
+		for i in 2:(nx-1)
+			# Precompute divergence terms for h:
+			div_x = dtdx * (DRx[1, i-1, j] + DLx[1, i, j])
+			div_y = dtdy * (DRy[1, i, j-1] + DLy[1, i, j])
+			h[i, j] -= div_x + div_y
 
-            # For qx:
-            div_x_qx = dtdx * (DRx[2, i-1, j] + DLx[2, i, j])
-            div_y_qx = dtdy * (DRy[2, i, j-1] + DLy[2, i, j])
-            qx[i, j] -= div_x_qx + div_y_qx
+			# For qx:
+			div_x_qx = dtdx * (DRx[2, i-1, j] + DLx[2, i, j])
+			div_y_qx = dtdy * (DRy[2, i, j-1] + DLy[2, i, j])
+			qx[i, j] -= div_x_qx + div_y_qx
 
-            # For qy:
-            div_x_qy = dtdx * (DRx[3, i-1, j] + DLx[3, i, j])
-            div_y_qy = dtdy * (DRy[3, i, j-1] + DLy[3, i, j])
-            qy[i, j] -= div_x_qy + div_y_qy
-        end
-    end
-    return nothing
+			# For qy:
+			div_x_qy = dtdx * (DRx[3, i-1, j] + DLx[3, i, j])
+			div_y_qy = dtdy * (DRy[3, i, j-1] + DLy[3, i, j])
+			qy[i, j] -= div_x_qy + div_y_qy
+		end
+	end
+	return nothing
 end
 
 function update_velocity!(u, v, qx, qy, h, nx, ny)
@@ -259,7 +259,7 @@ function update_velocity!(u, v, qx, qy, h, nx, ny)
 			end
 		end
 	end
-	return nothing 
+	return nothing
 end
 
 
@@ -275,7 +275,7 @@ end
 	hout    = 1.0
 	timeout = 4.0
 	# numerics
-	nx, ny = 401, 401
+	nx, ny = 201, 201
 	maxiter_t = 10000
 	ngp = 1  #number of gaussian points
 	sgp, wgp = gaussian_points(ngp)
@@ -459,4 +459,4 @@ end
 	return
 end
 
-DOT_2D(; do_check = false)
+DOT_2D(; do_check = true)

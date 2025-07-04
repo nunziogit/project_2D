@@ -2,7 +2,7 @@ using Plots, Plots.Measures
 ##default(size = (1200, 400), framestyle = :box, label = false, grid = false, margin = 10mm, lw = 6, labelfontsize = 20, tickfontsize = 20, titlefontsize = 24)
 #
 ## Include the external file with the plotting function
-#include("plot_results.jl")
+include("plot_results.jl")
 ##include("plot_results_3D.jl")
 
 
@@ -17,7 +17,7 @@ using Plots, Plots.Measures
 	# numerics
 	nx, ny = 101, 101
 	nt = 10000
-	ngp = 1  #number of gaussian points
+	ngp = 2  #number of gaussian points
 	sgp, wgp = gaussian_points(ngp)
 
 	#nvis = 20
@@ -67,7 +67,7 @@ using Plots, Plots.Measures
 	# time loop
 	time = 0.0
 	timeout_reached = false
-	@time for it ∈ 1:nt
+	@time for it ∈ 1:nt 
 		# set CFL condition
 		λx = @. (abs(u) + sqrt(gravit * h))
 		λy = @. (abs(v) + sqrt(gravit * h))
