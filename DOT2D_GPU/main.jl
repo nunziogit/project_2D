@@ -1,5 +1,5 @@
 # DOT 2D for solving the 2D Shallow Water Equations
-using Printf, CUDA, BechmarckTools, IJulia, Revise, Plots, LinearAlgebra
+using Printf, CUDA, IJulia, Revise, Plots, LinearAlgebra, Infiltrator
 
 ##default(size = (1200, 400), framestyle = :box, label = false, grid = false, margin = 10mm, lw = 6, labelfontsize = 20, tickfontsize = 20, titlefontsize = 24)
 #
@@ -7,26 +7,26 @@ using Printf, CUDA, BechmarckTools, IJulia, Revise, Plots, LinearAlgebra
 include("functions.jl")
 
 const PARAMETERS = (
-    gravit = 9.81
+    gravit = 9.81,
+	useless = 1.0
 )
 
 @views function DOT_2D()
 	# physics
 	lx, ly  = 40.0, 40.0
-	gravit = PARAMETERS.gravit 
+	gravit  = PARAMETERS.gravit 
 	R       = 2.5 #Radius of the initial circular dam
 	hins    = 2.5
 	hout    = 1.0
 	timeout = 2.0
 	# numerics
-	# nx, ny = 101, 101 # ORIGINAL
-	nx = ny = 8192
+	nx = ny = 512
     nt = 10000
 	ngp = 2  #number of gaussian points
 	sgp, wgp = gaussian_points(ngp)
 
 	# GPU settings
-	threads = (32, 32)
+	threads = (32, 16)
 	blocks = (nx÷threads[1], ny÷threads[2])
 
 	#nvis = 20
@@ -63,15 +63,15 @@ const PARAMETERS = (
 	cy = 0.5ly
 	#h .= ifelse.(in_square, hins, hout)
 	D = [sqrt((xi - cx)^2 + (yj - cy)^2) for xi in xc, yj in yc]
-	h .= ifelse.(D .<= R, hins, hout)
+	h_cpu .= ifelse.(D .<= R, hins, hout)
 	for i ∈ 1:nx
 		for j ∈ 1:ny
 			D = sqrt((xc[i] - cx)^2 + (yc[j] - cy)^2)
-			h[i, j] = D <= R ? hins : hout
+			h_cpu[i, j] = D <= R ? hins : hout
 		end
 	end
 
-
+	h = CuArray(h_cpu)
 	#set_dambreak!(h, hins, hout; direction = :y)
 	qx = @. (u * h)
 	qy = @. (v * h)
@@ -100,34 +100,34 @@ const PARAMETERS = (
 
         @views for igp ∈ 1:ngp
 			# Allocate vectors ----------- X -------------
-            hgpx    = cuda.zeros(Float64, 3, nx-1, ny)
-            ugpx    = cuda.zeros(Float64, 3, nx-1, ny)
-            vgpx    = cuda.zeros(Float64, 3, nx-1, ny)
+            hgpx    = CUDA.zeros(Float64, nx-1, ny)
+            ugpx    = CUDA.zeros(Float64, nx-1, ny)
+            vgpx    = CUDA.zeros(Float64, nx-1, ny)
 			dpsidsx = CUDA.zeros(Float64, 3, nx - 1, ny)
 			Axgp    = CUDA.zeros(Float64, 3, 3, nx - 1, ny)
 			Axgpabs = CUDA.zeros(Float64, 3, 3, nx - 1, ny)
-			
+
 			# Compute vectors
 			hgpx  = @. h[1:end-1,:] + sgp[igp] * (h[2:end,:] - h[1:end-1,:]) # come se R - L
 			ugpx  = @. u[1:end-1,:] + sgp[igp] * (u[2:end,:] - u[1:end-1,:])
-			vgpx  = @. v[1:end-1,:] + sgp[igp] * (v[2:end,:] - v[2:end-1,:])            
-			@cuda blocks=blocks threads=threads dpsisdx!(dpsidsx, h, u, v); synchronize()
-    		@cuda blocks=blocks threads=threads Axgp!(Axgp, hgp, ugp, vgp); synchronize()
-    		@cuda blocks=blocks threads=threads Axgpabs!(Axgpabs, hgp, ugp, vgp); synchronize()
-    		@cuda blocks=blocks threads=threads Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp); synchronize()
-			
+			vgpx  = @. v[1:end-1,:] + sgp[igp] * (v[2:end,:] - v[1:end-1,:])            
+			@cuda blocks=blocks threads=threads dpsidsx!(dpsidsx, h, u, v); synchronize()
+			@cuda blocks=blocks threads=threads Axgp!(Axgp, hgpx, ugpx, vgpx); synchronize()
+			@cuda blocks=blocks threads=threads Axgpabs!(Axgpabs, hgpx, ugpx, vgpx); synchronize()
+			@cuda blocks=blocks threads=threads Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp[igp]); synchronize()
+
 			# Deallocate vectors
-			CUDA.unsafe_free(hgpx)            
-            CUDA.unsafe_free(ugpx)            
-            CUDA.unsafe_free(vgpx)        
-			CUDA.unsafe_free(dpsidsx)
-			CUDA.unsafe_free(Axgp)
-			CUDA.unsafe_free(Axgpabs)
+			CUDA.unsafe_free!(hgpx)            
+            CUDA.unsafe_free!(ugpx)            
+            CUDA.unsafe_free!(vgpx)        
+			CUDA.unsafe_free!(dpsidsx)
+			CUDA.unsafe_free!(Axgp)
+			CUDA.unsafe_free!(Axgpabs)
 
 			# Allocate vectors ----------- Y -------------
-            hgpy    = cuda.zeros(Float64, 3, nx, ny-1)
-            ugpy    = cuda.zeros(Float64, 3, nx, ny-1)
-            vgpy    = cuda.zeros(Float64, 3, nx, ny-1)
+            hgpy    = CUDA.zeros(Float64, nx, ny-1)
+            ugpy    = CUDA.zeros(Float64, nx, ny-1)
+            vgpy    = CUDA.zeros(Float64, nx, ny-1)
 			dpsidsy = CUDA.zeros(Float64, 3, nx, ny - 1)
 			Aygp    = CUDA.zeros(Float64, 3, 3, nx, ny - 1)
 			Aygpabs = CUDA.zeros(Float64, 3, 3, nx, ny - 1)
@@ -136,18 +136,19 @@ const PARAMETERS = (
 			hgpy = @. h[:, 1:end-1] + sgp[igp] * (h[:, 2:end] - h[:, 1:end-1])
 			ugpy = @. u[:, 1:end-1] + sgp[igp] * (u[:, 2:end] - u[:, 1:end-1])
 			vgpy = @. v[:, 1:end-1] + sgp[igp] * (v[:, 2:end] - v[:, 1:end-1])
-			@cuda blocks=blocks threads=threads dpsisdy!(dpsidsy, h, u, v); synchronize()
-    		@cuda blocks=blocks threads=threads Aygp!(Aygp, hgp, ugp, vgp); synchronize()
-    		@cuda blocks=blocks threads=threads Aygpabs!(Aygpabs, hgp, ugp, vgp); synchronize()
-    		@cuda blocks=blocks threads=threads Dy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp); synchronize()
+			@cuda blocks=blocks threads=threads dpsidsy!(dpsidsy, h, u, v); synchronize()
+    		@cuda blocks=blocks threads=threads Aygp!(Aygp, hgpy, ugpy, vgpy); synchronize()
+    		@cuda blocks=blocks threads=threads Aygpabs!(Aygpabs, hgpy, ugpy, vgpy); synchronize()
+    		@cuda blocks=blocks threads=threads Dy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp[igp]); synchronize()
 
 			# Deallocate vectors
-            CUDA.unsafe_free(hgpy)
-            CUDA.unsafe_free(ugpy)
-            CUDA.unsafe_free(vgpy)
-			CUDA.unsafe_free(dpsidsy)
-			CUDA.unsafe_free(Aygp)
-			CUDA.unsafe_free(Aygpabs)
+            CUDA.unsafe_free!(hgpy)
+            CUDA.unsafe_free!(ugpy)
+            CUDA.unsafe_free!(vgpy)
+			CUDA.unsafe_free!(dpsidsy)
+			CUDA.unsafe_free!(Aygp)
+			CUDA.unsafe_free!(Aygpabs)
+			@infiltrate false
         end
 
         # update!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy, threads, blocks)
@@ -187,7 +188,8 @@ const PARAMETERS = (
 			println("Timeout reached")
 			break
 		end
-        
+
+		it%1000 == 0 && @printf("Iteration = %d, time = %.4f s \n", it, time)
 	end
 	# Call the plot_results function after the loop
 	#@show (u)
@@ -202,94 +204,7 @@ end
 
 DOT_2D()
 
-# ---------------------- FUNCTIONS --------------------
 
-function gaussian_points(ngp::Int)
-	if ngp == 1
-		sgp = [0.5]
-		wgp = [1.0]
-	elseif ngp == 2
-		sgp = [0.5 - sqrt(3) / 6, 0.5 + sqrt(3) / 6]
-		wgp = [0.5, 0.5]
-	elseif ngp == 3
-		sgp = [0.5 - sqrt(15) / 10, 0.5, 0.5 + sqrt(15) / 10]
-		wgp = [5 / 18, 8 / 18, 5 / 18]
-	else
-		error("Unsupported number of Gaussian points: $ngp")
-	end
-	return sgp, wgp
-end
-
-
-
-function set_dambreak!(h, hins, hout; direction = :x)
-	nx, ny = size(h)
-	if direction == :x
-		igate = nx ÷ 2
-		for i in 1:nx
-			for j in 1:ny
-				h[i, j] = i <= igate ? hins : hout
-			end
-		end
-	elseif direction == :y
-		jgate = ny ÷ 2
-		for i in 1:nx
-			for j in 1:ny
-				h[i, j] = j <= jgate ? hins : hout
-			end
-		end
-	else
-		error("Unknown direction: choose :x or :y")
-	end
-end
-
-function plot_results(xc, yc, h, u, v, lx, ly, final_time)
-    # Compute velocity magnitude
-    vel = sqrt.(u.^2 .+ v.^2)
-    
-    # Create heatmaps for h, u, v and vel
-    p1 = heatmap(xc, yc, h', title="Water Depth (h)",
-                 xlabel="x", ylabel="y", aspect_ratio=1)
-    p2 = heatmap(xc, yc, u', title="Velocity u",
-                 xlabel="x", ylabel="y", aspect_ratio=1)
-    p3 = heatmap(xc, yc, v', title="Velocity v",
-                 xlabel="x", ylabel="y", aspect_ratio=1)
-    p4 = heatmap(xc, yc, vel', title="Velocity Magnitude",
-                 xlabel="x", ylabel="y", aspect_ratio=1)
-    
-    # Determine grid dimensions
-    nx, ny = size(h)
-    n_diag = min(nx, ny)  # for diagonal extraction
-    
-    # Extract diagonal slices (45° slice through the domain)
-    slice_h   = [h[i, i] for i in 1:n_diag]
-    slice_u   = [u[i, i] for i in 1:n_diag]
-    slice_v   = [v[i, i] for i in 1:n_diag]
-    slice_vel = [vel[i, i] for i in 1:n_diag]
-        
-    # Compute a coordinate along the 45° slice.
-    # For each diagonal point (xc[i], yc[i]) the distance from the start is:
-    s = [sqrt((xc[i] - xc[1])^2 + (yc[i] - yc[1])^2) for i in 1:n_diag]
-    
-    # Create slice plots for each variable
-    p5 = plot(s, slice_h, lw=2, marker=:circle,
-              xlabel="Distance along 45° slice", ylabel="h",
-              title="Diagonal Slice of h")
-    p6 = plot(s, slice_u, lw=2, marker=:circle,
-              xlabel="Distance along 45° slice", ylabel="u",
-              title="Diagonal Slice of u")
-    p7 = plot(s, slice_v, lw=2, marker=:circle,
-              xlabel="Distance along 45° slice", ylabel="v",
-              title="Diagonal Slice of v")
-    p8 = plot(s, slice_vel, lw=2, marker=:circle,
-              xlabel="Distance along 45° slice", ylabel="vel",
-              title="Diagonal Slice of vel")
-    
-    # Combine heatmaps in one column and slices in the other.
-    # Arrange them in a layout with 4 rows and 2 columns.
-    plot(p1, p5, p2, p6, p3, p7, p4, p8, layout=(4,2), size=(1400,1000),
-     title="Results at t = $final_time")
-end
 
 # Example usage:
 # plot_results(xc, yc, h, u, v, lx, ly, final_time)

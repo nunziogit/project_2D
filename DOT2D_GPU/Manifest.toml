@@ -2,7 +2,7 @@
 
 julia_version = "1.11.6"
 manifest_format = "2.0"
-project_hash = "a7c926b5c89a01a4550724a67fc22a658c37918d"
+project_hash = "8557ab5d064dd21ece9dab614e83f13fef71009c"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -431,6 +431,12 @@ deps = ["Base64", "Conda", "Dates", "InteractiveUtils", "JSON", "Logging", "Mark
 git-tree-sha1 = "9e60d328aa8060368d6dadd24b644d0ebaf0c1cb"
 uuid = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
 version = "1.29.0"
+
+[[deps.Infiltrator]]
+deps = ["InteractiveUtils", "Markdown", "REPL", "UUIDs"]
+git-tree-sha1 = "c287eec86806afafb74fd633ac448b69245602fa"
+uuid = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
+version = "1.9.2"
 
 [[deps.InlineStrings]]
 git-tree-sha1 = "8594fac023c5ce1ef78260f24d1ad18b4327b420"
