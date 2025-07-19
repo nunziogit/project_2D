@@ -1,8 +1,6 @@
 using IJulia, BenchmarkTools, Revise, Printf 
 
-function xflux!(dpsidsx, Axgp, Axgpabs, DLx, DRx, h, u, v, hgp, ugp, vgp, wgp)
-    threads = (32, 32)
-    blocks  = (size(h,1)÷threads[1], size(h,2)÷threads[2])
+function xflux!(dpsidsx, Axgp, Axgpabs, DLx, DRx, h, u, v, hgp, ugp, vgp, wgp, threads, blocks)
     @cuda blocks=blocks threads=threads dpsidsx!(dpsidsx, h, u, v); synchronize()
     @cuda blocks=blocks threads=threads Axgp!(Axgp, hgp, ugp, vgp); synchronize()
     @cuda blocks=blocks threads=threads Axgpabs!(Axgpabs, hgp, ugp, vgp); synchronize()
@@ -97,9 +95,7 @@ function Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp)
 end
 
 # TOP == RIGHT
-function yflux!(dpsidsy, Aygp, Aygpabs, DLy, DRy, h, u, v, hgp, ugp, vgp, wgp)
-    threads = (32, 32)
-    blocks  = (size(h,1)÷threads[1], size(h,2)÷threads[2])
+function yflux!(dpsidsy, Aygp, Aygpabs, DLy, DRy, h, u, v, hgp, ugp, vgp, wgp, threads, blocks)
     @cuda blocks=blocks threads=threads dpsisdy!(dpsidsy, h, u, v); synchronize()
     @cuda blocks=blocks threads=threads Aygp!(Aygp, hgp, ugp, vgp); synchronize()
     @cuda blocks=blocks threads=threads Aygpabs!(Aygpabs, hgp, ugp, vgp); synchronize()
@@ -189,9 +185,7 @@ function Dy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp)
     end
 end
 
-function update!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy)
-    threads = (32, 32)
-    blocks  = (size(h,1)÷threads[1], size(h,2)÷threads[2])
+function update!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy, threads, blocks)
     @cuda blocks=blocks threads=threads hqxqy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy); synchronize()
 end
 
