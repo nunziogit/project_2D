@@ -1,13 +1,13 @@
 using IJulia, Revise, Printf, Infiltrator 
 
-function xflux!(dpsidsx, Axgp, Axgpabs, DLx, DRx, h, u, v, hgp, ugp, vgp, wgp, threads, blocks)
+@inbounds function xflux!(dpsidsx, Axgp, Axgpabs, DLx, DRx, h, u, v, hgp, ugp, vgp, wgp, threads, blocks)
     @cuda blocks=blocks threads=threads dpsidsx!(dpsidsx, h, u, v); synchronize()
     @cuda blocks=blocks threads=threads Axgp!(Axgp, hgp, ugp, vgp); synchronize()
     @cuda blocks=blocks threads=threads Axgpabs!(Axgpabs, hgp, ugp, vgp); synchronize()
     @cuda blocks=blocks threads=threads Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp); synchronize()
 end
 
-function dpsidsx!(dpsidsx, h, u, v)
+@inbounds function dpsidsx!(dpsidsx, h, u, v)
     ix = (blockIdx().x-1) * blockDim().x + threadIdx().x
     iy = (blockIdx().y-1) * blockDim().y + threadIdx().y
     if (ix≥1 && ix<size(h,1))
@@ -18,7 +18,7 @@ function dpsidsx!(dpsidsx, h, u, v)
     return
 end
 
-function Axgp!(Axgp, hgp, ugp, vgp)
+@inbounds function Axgp!(Axgp, hgp, ugp, vgp)
     gravit = PARAMETERS.gravit
     # abbiamo messo gp per ricordarci che non ci sono tutti i punti ma 
     # ne manca uno in x
@@ -39,7 +39,7 @@ function Axgp!(Axgp, hgp, ugp, vgp)
     return
 end
 
-function Axgpabs!(Axgpabs, hgp, ugp, vgp)
+@inbounds function Axgpabs!(Axgpabs, hgp, ugp, vgp)
     gravit = PARAMETERS.gravit
     # abbiamo messo gp per ricordarci che non ci sono tutti i punti ma 
     # ne manca uno in x
@@ -70,27 +70,33 @@ function Axgpabs!(Axgpabs, hgp, ugp, vgp)
     return
 end
 
-function Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp)
+@inbounds function Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp)
     ix = (blockIdx().x-1) * blockDim().x + threadIdx().x
     iy = (blockIdx().y-1) * blockDim().y + threadIdx().y
     if (ix≥1 && ix≤size(dpsidsx,2))
-        DLx[1, ix, iy] = 0.5* wgp*( ((Axgp[1, 1, ix, iy] - Axgpabs[1, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
+        DLx[1, ix, iy] = DLx[1, ix, iy] + 0.5* wgp*( 
+                                    ((Axgp[1, 1, ix, iy] - Axgpabs[1, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
                                     ((Axgp[1, 2, ix, iy] - Axgpabs[1, 2, ix, iy]) * dpsidsx[2, ix, iy]) +
                                     ((Axgp[1, 3, ix, iy] - Axgpabs[1, 3, ix, iy]) * dpsidsx[3, ix, iy]) )
-        DLx[2, ix, iy] = 0.5* wgp*( ((Axgp[2, 1, ix, iy] - Axgpabs[2, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
+        DLx[2, ix, iy] = DLx[2, ix, iy] + 0.5* wgp*( 
+                                    ((Axgp[2, 1, ix, iy] - Axgpabs[2, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
                                     ((Axgp[2, 2, ix, iy] - Axgpabs[2, 2, ix, iy]) * dpsidsx[2, ix, iy]) +
                                     ((Axgp[2, 3, ix, iy] - Axgpabs[2, 3, ix, iy]) * dpsidsx[3, ix, iy]) )
-        DLx[3, ix, iy] = 0.5* wgp*( ((Axgp[3, 1, ix, iy] - Axgpabs[3, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
+        DLx[3, ix, iy] = DLx[3, ix, iy] + 0.5* wgp*( 
+                                    ((Axgp[3, 1, ix, iy] - Axgpabs[3, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
                                     ((Axgp[3, 2, ix, iy] - Axgpabs[3, 2, ix, iy]) * dpsidsx[2, ix, iy]) +
                                     ((Axgp[3, 3, ix, iy] - Axgpabs[3, 3, ix, iy]) * dpsidsx[3, ix, iy]) )
 
-        DRx[1, ix, iy] = 0.5* wgp*( ((Axgp[1, 1, ix, iy] + Axgpabs[1, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
+        DRx[1, ix, iy] = DRx[1, ix, iy] + 0.5* wgp*( 
+                                    ((Axgp[1, 1, ix, iy] + Axgpabs[1, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
                                     ((Axgp[1, 2, ix, iy] + Axgpabs[1, 2, ix, iy]) * dpsidsx[2, ix, iy]) +
                                     ((Axgp[1, 3, ix, iy] + Axgpabs[1, 3, ix, iy]) * dpsidsx[3, ix, iy]) )
-        DRx[2, ix, iy] = 0.5* wgp*( ((Axgp[2, 1, ix, iy] + Axgpabs[2, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
+        DRx[2, ix, iy] = DRx[2, ix, iy] + 0.5* wgp*(    
+                                    ((Axgp[2, 1, ix, iy] + Axgpabs[2, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
                                     ((Axgp[2, 2, ix, iy] + Axgpabs[2, 2, ix, iy]) * dpsidsx[2, ix, iy]) +
                                     ((Axgp[2, 3, ix, iy] + Axgpabs[2, 3, ix, iy]) * dpsidsx[3, ix, iy]) )
-        DRx[3, ix, iy] = 0.5* wgp*( ((Axgp[3, 1, ix, iy] + Axgpabs[3, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
+        DRx[3, ix, iy] = DRx[3, ix, iy] + 0.5* wgp*( 
+                                    ((Axgp[3, 1, ix, iy] + Axgpabs[3, 1, ix, iy]) * dpsidsx[1, ix, iy]) + 
                                     ((Axgp[3, 2, ix, iy] + Axgpabs[3, 2, ix, iy]) * dpsidsx[2, ix, iy]) +
                                     ((Axgp[3, 3, ix, iy] + Axgpabs[3, 3, ix, iy]) * dpsidsx[3, ix, iy]) )
     end
@@ -98,14 +104,14 @@ function Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp)
 end
 
 # TOP == RIGHT
-function yflux!(dpsidsy, Aygp, Aygpabs, DLy, DRy, h, u, v, hgp, ugp, vgp, wgp, threads, blocks)
+@inbounds function yflux!(dpsidsy, Aygp, Aygpabs, DLy, DRy, h, u, v, hgp, ugp, vgp, wgp, threads, blocks)
     @cuda blocks=blocks threads=threads dpsidsy!(dpsidsy, h, u, v); synchronize()
     @cuda blocks=blocks threads=threads Aygp!(Aygp, hgp, ugp, vgp); synchronize()
     @cuda blocks=blocks threads=threads Aygpabs!(Aygpabs, hgp, ugp, vgp); synchronize()
     @cuda blocks=blocks threads=threads Dy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp); synchronize()
 end
 
-function dpsidsy!(dpsidsy, h, u, v)
+@inbounds function dpsidsy!(dpsidsy, h, u, v)
     ix = (blockIdx().x-1) * blockDim().x + threadIdx().x
     iy = (blockIdx().y-1) * blockDim().y + threadIdx().y
     if (iy≥1 && iy<size(h,2))
@@ -116,7 +122,7 @@ function dpsidsy!(dpsidsy, h, u, v)
     return
 end
 
-function Aygp!(Aygp, hgp, ugp, vgp)
+@inbounds function Aygp!(Aygp, hgp, ugp, vgp)
     gravit = PARAMETERS.gravit
     # abbiamo messo gp per ricordarci che non ci sono tutti i punti ma 
     # ne manca uno in x
@@ -137,7 +143,7 @@ function Aygp!(Aygp, hgp, ugp, vgp)
     return
 end
 
-function Aygpabs!(Aygpabs, hgp, ugp, vgp)
+@inbounds function Aygpabs!(Aygpabs, hgp, ugp, vgp)
     gravit = PARAMETERS.gravit
     # abbiamo messo gp per ricordarci che non ci sono tutti i punti ma 
     # ne manca uno in x
@@ -168,46 +174,52 @@ function Aygpabs!(Aygpabs, hgp, ugp, vgp)
     return
 end
 
-function Dy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp)
+@inbounds function Dy!(DLy, DRy, dpsidsy, Aygp, Aygpabs, wgp)
     ix = (blockIdx().x-1) * blockDim().x + threadIdx().x
     iy = (blockIdx().y-1) * blockDim().y + threadIdx().y
     if (iy≥1 && iy≤size(dpsidsy,3))
         # DLy[:, ix, iy] = 0.5*(wgp * (Aygp[:, :, ix, iy] - Aygpabs[:, :, ix, iy]) * dpsidsy[:, ix, iy])
 		# DRy[:, ix, iy] = 0.5*(wgp * (Aygp[:, :, ix, iy] + Aygpabs[:, :, ix, iy]) * dpsidsy[:, ix, iy])
-        DLy[1, ix, iy] = 0.5* wgp*( ((Aygp[1, 1, ix, iy] - Aygpabs[1, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
+        DLy[1, ix, iy] = DLy[1, ix, iy] + 0.5* wgp*( 
+                                    ((Aygp[1, 1, ix, iy] - Aygpabs[1, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
                                     ((Aygp[1, 2, ix, iy] - Aygpabs[1, 2, ix, iy]) * dpsidsy[2, ix, iy]) +
                                     ((Aygp[1, 3, ix, iy] - Aygpabs[1, 3, ix, iy]) * dpsidsy[3, ix, iy]) )
-        DLy[2, ix, iy] = 0.5* wgp*( ((Aygp[2, 1, ix, iy] - Aygpabs[2, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
+        DLy[2, ix, iy] = DLy[2, ix, iy] + 0.5* wgp*( 
+                                    ((Aygp[2, 1, ix, iy] - Aygpabs[2, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
                                     ((Aygp[2, 2, ix, iy] - Aygpabs[2, 2, ix, iy]) * dpsidsy[2, ix, iy]) +
                                     ((Aygp[2, 3, ix, iy] - Aygpabs[2, 3, ix, iy]) * dpsidsy[3, ix, iy]) )
-        DLy[3, ix, iy] = 0.5* wgp*( ((Aygp[3, 1, ix, iy] - Aygpabs[3, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
+        DLy[3, ix, iy] = DLy[3, ix, iy] + 0.5* wgp*( 
+                                    ((Aygp[3, 1, ix, iy] - Aygpabs[3, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
                                     ((Aygp[3, 2, ix, iy] - Aygpabs[3, 2, ix, iy]) * dpsidsy[2, ix, iy]) +
                                     ((Aygp[3, 3, ix, iy] - Aygpabs[3, 3, ix, iy]) * dpsidsy[3, ix, iy]) )
 
-        DRy[1, ix, iy] = 0.5* wgp*( ((Aygp[1, 1, ix, iy] + Aygpabs[1, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
+        DRy[1, ix, iy] = DRy[1, ix, iy] + 0.5* wgp*( 
+                                    ((Aygp[1, 1, ix, iy] + Aygpabs[1, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
                                     ((Aygp[1, 2, ix, iy] + Aygpabs[1, 2, ix, iy]) * dpsidsy[2, ix, iy]) +
                                     ((Aygp[1, 3, ix, iy] + Aygpabs[1, 3, ix, iy]) * dpsidsy[3, ix, iy]) )
-        DRy[2, ix, iy] = 0.5* wgp*( ((Aygp[2, 1, ix, iy] + Aygpabs[2, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
+        DRy[2, ix, iy] = DRy[2, ix, iy] + 0.5* wgp*( 
+                                    ((Aygp[2, 1, ix, iy] + Aygpabs[2, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
                                     ((Aygp[2, 2, ix, iy] + Aygpabs[2, 2, ix, iy]) * dpsidsy[2, ix, iy]) +
                                     ((Aygp[2, 3, ix, iy] + Aygpabs[2, 3, ix, iy]) * dpsidsy[3, ix, iy]) )
-        DRy[3, ix, iy] = 0.5* wgp*( ((Aygp[3, 1, ix, iy] + Aygpabs[3, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
+        DRy[3, ix, iy] = DRy[3, ix, iy] + 0.5* wgp*( 
+                                    ((Aygp[3, 1, ix, iy] + Aygpabs[3, 1, ix, iy]) * dpsidsy[1, ix, iy]) + 
                                     ((Aygp[3, 2, ix, iy] + Aygpabs[3, 2, ix, iy]) * dpsidsy[2, ix, iy]) +
                                     ((Aygp[3, 3, ix, iy] + Aygpabs[3, 3, ix, iy]) * dpsidsy[3, ix, iy]) )
     end
     return
 end
 
-function update!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy, threads, blocks)
+@inbounds function update!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy, threads, blocks)
     @cuda blocks=blocks threads=threads hqxqy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy); synchronize()
 end
 
-function hqxqy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy)
+@inbounds function hqxqy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy)
     ix = (blockIdx().x-1) * blockDim().x + threadIdx().x
     iy = (blockIdx().y-1) * blockDim().y + threadIdx().y
     if (ix>1 && ix < size(h,1) && iy>1 && iy< size(h,2))
-         h[ix, iy] =  h[ix, iy] - dtdx * (DRx[1, ix-1, iy] + DLx[1, ix, iy]) + dtdy * (DRy[1, ix, iy-1] + DLy[1, ix, iy])
-		qx[ix, iy] = qx[ix, iy] - dtdx * (DRx[2, ix-1, iy] + DLx[2, ix, iy]) + dtdy * (DRy[2, ix, iy-1] + DLy[2, ix, iy])
-		qy[ix, iy] = qy[ix, iy] - dtdx * (DRx[3, ix-1, iy] + DLx[3, ix, iy]) + dtdy * (DRy[3, ix, iy-1] + DLy[3, ix, iy])
+         h[ix, iy] =  h[ix, iy] - dtdx * (DRx[1, ix-1, iy] + DLx[1, ix, iy]) - dtdy * (DRy[1, ix, iy-1] + DLy[1, ix, iy])
+		qx[ix, iy] = qx[ix, iy] - dtdx * (DRx[2, ix-1, iy] + DLx[2, ix, iy]) - dtdy * (DRy[2, ix, iy-1] + DLy[2, ix, iy])
+		qy[ix, iy] = qy[ix, iy] - dtdx * (DRx[3, ix-1, iy] + DLx[3, ix, iy]) - dtdy * (DRy[3, ix, iy-1] + DLy[3, ix, iy])
     end
     # Left wall
      h[1, iy] =   h[2, iy]
@@ -228,7 +240,7 @@ function hqxqy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy)
     return
 end
 
-function gaussian_points(ngp::Int)
+@inbounds function gaussian_points(ngp::Int)
 	if ngp == 1
 		sgp = [0.5]
 		wgp = [1.0]
@@ -244,7 +256,7 @@ function gaussian_points(ngp::Int)
 	return sgp, wgp
 end
 
-function set_dambreak!(h, hins, hout; direction = :x)
+@inbounds function set_dambreak!(h, hins, hout; direction = :x)
 	nx, ny = size(h)
 	if direction == :x
 		igate = nx ÷ 2
@@ -265,7 +277,7 @@ function set_dambreak!(h, hins, hout; direction = :x)
 	end
 end
 
-function plot_results(xc, yc, h, u, v, lx, ly, final_time)
+@inbounds function plot_results(xc, yc, h, u, v, lx, ly, final_time)
     # Compute velocity magnitude
     vel = sqrt.(u.^2 .+ v.^2)
     

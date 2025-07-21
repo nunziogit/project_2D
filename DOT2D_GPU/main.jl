@@ -11,7 +11,7 @@ const PARAMETERS = (
 	useless = 1.0
 )
 
-@views function DOT_2D()
+@views @inbounds function DOT_2D()
 	# physics
 	lx, ly  = 40.0, 40.0
 	gravit  = PARAMETERS.gravit 
@@ -20,10 +20,11 @@ const PARAMETERS = (
 	hout    = 1.0
 	timeout = 2.0
 	# numerics
-	nx = ny = 512
+	nx = ny = 1024
     nt = 10000
 	ngp = 2  #number of gaussian points
 	sgp, wgp = gaussian_points(ngp)
+	nvis = 1000
 
 	# GPU settings
 	threads = (32, 16)
@@ -79,6 +80,8 @@ const PARAMETERS = (
 	# time loop
 	time = 0.0
 	timeout_reached = false
+	plot_results(xc, yc, h_cpu, u_cpu, v_cpu, lx, ly, time)
+
 	@time for it ∈ 1:nt 
 		# set CFL condition
 		λx = @. (abs(u) + sqrt(gravit * h))
@@ -97,8 +100,7 @@ const PARAMETERS = (
 		# Precompute constant factors
 		dtdx = dt / dx
 		dtdy = dt / dy
-
-        @views for igp ∈ 1:ngp
+        @views @inbounds for igp ∈ 1:ngp
 			# Allocate vectors ----------- X -------------
             hgpx    = CUDA.zeros(Float64, nx-1, ny)
             ugpx    = CUDA.zeros(Float64, nx-1, ny)
@@ -108,13 +110,14 @@ const PARAMETERS = (
 			Axgpabs = CUDA.zeros(Float64, 3, 3, nx - 1, ny)
 
 			# Compute vectors
-			hgpx  = @. h[1:end-1,:] + sgp[igp] * (h[2:end,:] - h[1:end-1,:]) # come se R - L
+			hgpx  = @. h[1:end-1,:] + sgp[igp] * (h[2:end,:] - h[1:end-1,:]) 
 			ugpx  = @. u[1:end-1,:] + sgp[igp] * (u[2:end,:] - u[1:end-1,:])
 			vgpx  = @. v[1:end-1,:] + sgp[igp] * (v[2:end,:] - v[1:end-1,:])            
 			@cuda blocks=blocks threads=threads dpsidsx!(dpsidsx, h, u, v); synchronize()
 			@cuda blocks=blocks threads=threads Axgp!(Axgp, hgpx, ugpx, vgpx); synchronize()
 			@cuda blocks=blocks threads=threads Axgpabs!(Axgpabs, hgpx, ugpx, vgpx); synchronize()
 			@cuda blocks=blocks threads=threads Dx!(DLx, DRx, dpsidsx, Axgp, Axgpabs, wgp[igp]); synchronize()
+			# Axgp[2,1,:,:] sono diverse tra cpu e gpu
 
 			# Deallocate vectors
 			CUDA.unsafe_free!(hgpx)            
@@ -148,51 +151,47 @@ const PARAMETERS = (
 			CUDA.unsafe_free!(dpsidsy)
 			CUDA.unsafe_free!(Aygp)
 			CUDA.unsafe_free!(Aygpabs)
-			@infiltrate false
         end
 
         # update!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy, threads, blocks)
 		@cuda blocks=blocks threads=threads hqxqy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy); synchronize()
 
-
-        #= Bullshit
+        # Bullshit Bullshit
 		#Set fluctuation to zero
 		DLx .= 0.0
 		DRx .= 0.0
 		DLy .= 0.0
 		DRy .= 0.0
-        =#
 
 		# Update velocity safely to avoid division by zero
-		#u .= @. ifelse(h > 1e-12, qx / h, 0.0)
-		#v .= @. ifelse(h > 1e-12, qy / h, 0.0)
+		u = @. ifelse(h > 1e-12, qx / h, 0.0)
+		v = @. ifelse(h > 1e-12, qy / h, 0.0)
 		# Update velocities from momentum and depth, making sure to avoid division by zero.
-		if (it%100 == 0)
-            h_cpu  = Array(h)
-            qx_cpu = Array(qx)
-            qy_cpu = Array(qy)
-            for i in 1:(nx)
-		    	for j in 1:(ny)
-		    		if  h_cpu[i, j] > 1e-12
-		    			u_cpu[i, j] = qx_cpu[i, j] / h_cpu[i, j]
-		    			v_cpu[i, j] = qy_cpu[i, j] / h_cpu[i, j]
-		    		else
-		    			u_cpu[i, j] = 0.0
-		    			v_cpu[i, j] = 0.0
-		    		end
-		    	end
-		    end
-        end
+		
 		# Exit the loop if timeout_reached is true
 		if timeout_reached
 			println("Timeout reached")
 			break
 		end
 
-		it%1000 == 0 && @printf("Iteration = %d, time = %.4f s \n", it, time)
+		# it%nvis == 0 && @printf("Iteration = %d, time = %.4f s \n", it, time)
 	end
 	# Call the plot_results function after the loop
 	#@show (u)
+    h_cpu  = Array(h)
+    qx_cpu = Array(qx)
+    qy_cpu = Array(qy)
+    @inbounds for i in 1:(nx)
+		for j in 1:(ny)
+			if  h_cpu[i, j] > 1e-12
+				u_cpu[i, j] = qx_cpu[i, j] / h_cpu[i, j]
+				v_cpu[i, j] = qy_cpu[i, j] / h_cpu[i, j]
+			else
+				u_cpu[i, j] = 0.0
+				v_cpu[i, j] = 0.0
+			end
+		end
+	end
 	plot_results(xc, yc, h_cpu, u_cpu, v_cpu, lx, ly, timeout)
 	# Call the plot_results_3D function to visualize the results in 3D
 	#plot_results_3D(xc, yc, h, timeout)

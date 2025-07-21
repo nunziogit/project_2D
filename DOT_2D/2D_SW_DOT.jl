@@ -1,4 +1,4 @@
-using Plots, Plots.Measures
+using Plots, Plots.Measures, Infiltrator, Printf
 ##default(size = (1200, 400), framestyle = :box, label = false, grid = false, margin = 10mm, lw = 6, labelfontsize = 20, tickfontsize = 20, titlefontsize = 24)
 #
 ## Include the external file with the plotting function
@@ -15,12 +15,12 @@ include("plot_results.jl")
 	hout    = 1.0
 	timeout = 2.0
 	# numerics
-	nx, ny = 101, 101
+	nx = ny = 256
 	nt = 10000
 	ngp = 2  #number of gaussian points
 	sgp, wgp = gaussian_points(ngp)
 
-	#nvis = 20
+	nvis = 1000
 	cfl = 0.49
 	# derived numerics
 	dx, dy = lx / nx, ly / ny
@@ -177,6 +177,7 @@ include("plot_results.jl")
 			DRx = @. 0.5 * DRx
 		end
 
+		# Y 
 		@views begin
 			# --- Y-direction fluxes (horizontal faces) ---
 			# Bottom/top states on cell faces
@@ -332,6 +333,7 @@ include("plot_results.jl")
 			println("Timeout reached")
 			break
 		end
+		# it%nvis == 0 && @printf("Iteration = %d, time = %.4f s \n", it, time)
 	end
 	# Call the plot_results function after the loop
 	#@show (u)
