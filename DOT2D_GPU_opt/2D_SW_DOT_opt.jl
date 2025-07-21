@@ -325,7 +325,7 @@ end
     nx = ny = 128 # → numero di celle
     threads = (32, 16)
 	blocks = (nx÷threads[1], ny÷threads[2])
-
+    # configurazioni ottimali (32, 1)
     p = parameters(nx, ny)
 	xc, yc = LinRange(0.5 * p.dx, p.lx - 0.5 * p.dx, nx), LinRange(0.5 * p.dy, p.ly - 0.5 * p.dy, ny) # baricentri delle celle
 	sgp, wgp = gaussian_points(p.ngp) # funzione per i punti di Gauss e i pesi
