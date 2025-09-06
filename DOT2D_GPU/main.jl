@@ -112,7 +112,7 @@ const PARAMETERS = (
 			# Compute vectors
 			hgpx  = @. h[1:end-1,:] + sgp[igp] * (h[2:end,:] - h[1:end-1,:]) 
 			ugpx  = @. u[1:end-1,:] + sgp[igp] * (u[2:end,:] - u[1:end-1,:])
-			vgpx  = @. v[1:end-1,:] + sgp[igp] * (v[2:end,:] - v[1:end-1,:])            
+			vgpx  = @. v[1:end-1,:] + sgp[igp] * (v[2:end,:] - v[1:end-1,:])
 			@cuda blocks=blocks threads=threads dpsidsx!(dpsidsx, h, u, v); synchronize()
 			@cuda blocks=blocks threads=threads Axgp!(Axgp, hgpx, ugpx, vgpx); synchronize()
 			@cuda blocks=blocks threads=threads Axgpabs!(Axgpabs, hgpx, ugpx, vgpx); synchronize()

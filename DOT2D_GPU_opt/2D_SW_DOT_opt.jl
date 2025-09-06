@@ -159,6 +159,7 @@ end
     end
     return nothing
 end
+
 @inbounds @views function compute_yfluxes!(DLy, DRy, h, u, v, sgp, wgp, p, nx, ny)
     gravit = p.gravit;      ngp = p.ngp
     i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
@@ -251,6 +252,7 @@ end
 
     return nothing
 end
+
 @inbounds @views function update_h_qx_qy!(h, qx, qy, DRx, DRy, DLx, DLy, dtdx, dtdy, p, nx, ny)
 	i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     j = (blockIdx().y - 1) * blockDim().y + threadIdx().y

@@ -459,4 +459,4 @@ end
 	return
 end
 
-DOT_2D(; do_check = true)
+DOT_2D(; do_check = false)
