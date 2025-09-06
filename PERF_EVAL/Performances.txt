@@ -6,6 +6,10 @@ nGP = 3
 final time = 2.0 seconds
 cfl = 0.49
 
+CPU characteristics
+8 CPUs, Intel(R) Core(TM) i9-9900K CPU @ 3.60 GHz
+RAM: around 32 GB + 8 of swap
+
 MATLAB code:
 - 177.67 s
 - 178.87 s
