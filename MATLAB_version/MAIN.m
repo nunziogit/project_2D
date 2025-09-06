@@ -318,64 +318,65 @@ end % main loop in time
 elapsed_time = toc;
 fprintf("Elapsed time: %.4f seconds \n", elapsed_time)
 
-% --- Compute velocity magnitude ---
-vel = sqrt(u.^2 + v.^2);
 
-% --- Heatmaps for h, u, v, vel ---
-figure;
-
-subplot(4,2,1);
-imagesc(xc, yc, h'); axis equal; colorbar;
-xlabel('x'); ylabel('y'); title('Water Depth (h)');
-
-subplot(4,2,3);
-imagesc(xc, yc, u'); axis equal; colorbar;
-xlabel('x'); ylabel('y'); title('Velocity u');
-
-subplot(4,2,5);
-imagesc(xc, yc, v'); axis equal; colorbar;
-xlabel('x'); ylabel('y'); title('Velocity v');
-
-subplot(4,2,7);
-imagesc(xc, yc, vel'); axis equal; colorbar;
-xlabel('x'); ylabel('y'); title('Velocity Magnitude');
-
-% --- Extract diagonal slices (45° slice through the domain) ---
-[nx, ny] = size(h);
-n_diag = min(nx, ny);
-
-slice_h   = zeros(1, n_diag);
-slice_u   = zeros(1, n_diag);
-slice_v   = zeros(1, n_diag);
-slice_vel = zeros(1, n_diag);
-s         = zeros(1, n_diag);
-
-for i = 1:n_diag
-    slice_h(i)   = h(i, i);
-    slice_u(i)   = u(i, i);
-    slice_v(i)   = v(i, i);
-    slice_vel(i) = vel(i, i);
-    s(i)         = sqrt((xc(i) - xc(1))^2 + (yc(i) - yc(1))^2);
-end
-
-% --- Slice plots ---
-subplot(4,2,2);
-plot(s, slice_h, 'o-', 'LineWidth', 2);
-xlabel('Distance along 45° slice'); ylabel('h'); title('Diagonal Slice of h');
-
-subplot(4,2,4);
-plot(s, slice_u, 'o-', 'LineWidth', 2);
-xlabel('Distance along 45° slice'); ylabel('u'); title('Diagonal Slice of u');
-
-subplot(4,2,6);
-plot(s, slice_v, 'o-', 'LineWidth', 2);
-xlabel('Distance along 45° slice'); ylabel('v'); title('Diagonal Slice of v');
-
-subplot(4,2,8);
-plot(s, slice_vel, 'o-', 'LineWidth', 2);
-xlabel('Distance along 45° slice'); ylabel('vel'); title('Diagonal Slice of vel');
-
-sgtitle(['Results at t = ', num2str(timeout)]);
+% % --- Compute velocity magnitude ---
+% vel = sqrt(u.^2 + v.^2);
+% 
+% % --- Heatmaps for h, u, v, vel ---
+% figure;
+% 
+% subplot(4,2,1);
+% imagesc(xc, yc, h'); axis equal; colorbar;
+% xlabel('x'); ylabel('y'); title('Water Depth (h)');
+% 
+% subplot(4,2,3);
+% imagesc(xc, yc, u'); axis equal; colorbar;
+% xlabel('x'); ylabel('y'); title('Velocity u');
+% 
+% subplot(4,2,5);
+% imagesc(xc, yc, v'); axis equal; colorbar;
+% xlabel('x'); ylabel('y'); title('Velocity v');
+% 
+% subplot(4,2,7);
+% imagesc(xc, yc, vel'); axis equal; colorbar;
+% xlabel('x'); ylabel('y'); title('Velocity Magnitude');
+% 
+% % --- Extract diagonal slices (45° slice through the domain) ---
+% [nx, ny] = size(h);
+% n_diag = min(nx, ny);
+% 
+% slice_h   = zeros(1, n_diag);
+% slice_u   = zeros(1, n_diag);
+% slice_v   = zeros(1, n_diag);
+% slice_vel = zeros(1, n_diag);
+% s         = zeros(1, n_diag);
+% 
+% for i = 1:n_diag
+%     slice_h(i)   = h(i, i);
+%     slice_u(i)   = u(i, i);
+%     slice_v(i)   = v(i, i);
+%     slice_vel(i) = vel(i, i);
+%     s(i)         = sqrt((xc(i) - xc(1))^2 + (yc(i) - yc(1))^2);
+% end
+% 
+% % --- Slice plots ---
+% subplot(4,2,2);
+% plot(s, slice_h, 'o-', 'LineWidth', 2);
+% xlabel('Distance along 45° slice'); ylabel('h'); title('Diagonal Slice of h');
+% 
+% subplot(4,2,4);
+% plot(s, slice_u, 'o-', 'LineWidth', 2);
+% xlabel('Distance along 45° slice'); ylabel('u'); title('Diagonal Slice of u');
+% 
+% subplot(4,2,6);
+% plot(s, slice_v, 'o-', 'LineWidth', 2);
+% xlabel('Distance along 45° slice'); ylabel('v'); title('Diagonal Slice of v');
+% 
+% subplot(4,2,8);
+% plot(s, slice_vel, 'o-', 'LineWidth', 2);
+% xlabel('Distance along 45° slice'); ylabel('vel'); title('Diagonal Slice of vel');
+% 
+% sgtitle(['Results at t = ', num2str(timeout)]);
 
 
 
