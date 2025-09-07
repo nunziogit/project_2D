@@ -25,11 +25,11 @@ Julia CPU code:
 - 16.88 s
 
 Julia GPU code:
-- 1.34 s
-- 1.30 s
-- 1.33 s
-- 1.29 s
-- 1.29 s
+- 1.24 s
+- 1.25 s
+- 1.24 s
+- 1.23 s
+- 1.25 s
 
 Julia GPU optimized code:
 - 0.64 s
@@ -37,3 +37,45 @@ Julia GPU optimized code:
 - 0.63 s
 - 0.63 s
 - 0.63 s
+
+Trial with increasing grid resolution
+GPU:     nx = ny = 128 and Threads = (32, 1) T_tot = 279.7846 GB/s
+GPU:     nx = ny = 256 and Threads = (32, 1) T_tot = 317.0264 GB/s
+GPU:     nx = ny = 512 and Threads = (32, 1) T_tot = 348.2297 GB/s
+GPU:     nx = ny = 1024 and Threads = (32, 1) T_tot = 355.8493 GB/s
+GPU_opt: nx = ny = 128 and Threads = (32, 1) T_tot = 294.1857 GB/s
+GPU_opt: nx = ny = 256 and Threads = (32, 1) T_tot = 429.2971 GB/s
+GPU_opt: nx = ny = 512 and Threads = (32, 1) T_tot = 486.5241 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (32, 1) T_tot = 508.1810 GB/s
+
+Trial with different combinations of threads in the two directions
+GPU:     nx = ny = 1024 and Threads = (16, 1) T_tot = 428.0921 GB/s
+GPU:     nx = ny = 1024 and Threads = (16, 2) T_tot = 349.5450 GB/s
+GPU:     nx = ny = 1024 and Threads = (16, 4) T_tot = 283.8044 GB/s
+GPU:     nx = ny = 1024 and Threads = (16, 8) T_tot = 277.1095 GB/s
+GPU:     nx = ny = 1024 and Threads = (16, 16) T_tot = 261.7468 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (16, 1) T_tot = 258.2552 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (16, 2) T_tot = 501.8698 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (16, 4) T_tot = 500.9688 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (16, 8) T_tot = 503.7472 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (16, 16) T_tot = 499.3498 GB/s
+
+
+GPU:     nx = ny = 1024 and Threads = (8, 1) T_tot = 280.1157 GB/s
+GPU:     nx = ny = 1024 and Threads = (8, 2) T_tot = 429.4309 GB/s
+GPU:     nx = ny = 1024 and Threads = (8, 4) T_tot = 348.6512 GB/s
+GPU:     nx = ny = 1024 and Threads = (8, 8) T_tot = 274.3687 GB/s
+GPU:     nx = ny = 1024 and Threads = (8, 16) T_tot = 258.8062 GB/s
+GPU:     nx = ny = 1024 and Threads = (8, 32) T_tot = 235.8503 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (8, 1) T_tot = 129.6742 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (8, 2) T_tot = 256.8483 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (8, 4) T_tot = 500.8286 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (8, 8) T_tot = 499.7613 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (8, 16) T_tot = 508.2702 GB/s
+GPU_opt: nx = ny = 1024 and Threads = (8, 32) T_tot = 495.3336 GB/s
+
+
+
+
+
+
